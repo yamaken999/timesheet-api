@@ -84,10 +84,15 @@ def generate_timesheet():
                     ws[f"{col}{row}"].number_format = "h:mm"
 
     # 出力ファイル名を構築
-    safe_name = name.replace(" ", "_").replace("　", "_")
-    output_filename = f"{template_filename}_{safe_name}.xlsx"
+    eid = request.form.get("eid")
+    output_filename = f"{template_filename}_{eid}.xlsx"
 
     output_stream = io.BytesIO()
     wb.save(output_stream)
     output_stream.seek(0)
     return send_file(output_stream, as_attachment=True, download_name=output_filename)
+
+# ✅ Renderが使用するPORTを明示的にバインド
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
