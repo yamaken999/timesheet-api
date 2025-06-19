@@ -1,4 +1,5 @@
 from flask import Flask, request, send_file
+from flask_cors import CORS
 from openpyxl import load_workbook
 from openpyxl.styles import Font
 from datetime import datetime, date, timedelta
@@ -8,6 +9,7 @@ import os
 import io
 
 app = Flask(__name__)
+CORS(app)  # すべてのオリジンからのアクセスを許可
 
 @app.route("/upload", methods=["POST"])
 def generate_timesheet():
