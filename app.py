@@ -15,6 +15,7 @@ CORS(app)  # すべてのオリジンからのアクセスを許可
 def generate_timesheet():
     files = request.files.getlist("files")
     name = request.form.get("name")
+    eid = request.form.get("eid")
     year = int(request.form.get("year"))
     month = int(request.form.get("month"))
     task = request.form.get("task")
@@ -85,16 +86,39 @@ def generate_timesheet():
                 if ws[f"{col}{row}"].value is not None:
                     ws[f"{col}{row}"].number_format = "h:mm"
 
-    # 出力ファイル名を構築
-    eid = request.form.get("eid")
-    output_filename = f"{template_filename}_{eid}.xlsx"
+    # 就業時間・実働日セルへの数式挿入
+    def find_cell_by_value(ws, value, column=None):
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value == value and (column is None or cell.column == column):
+                    return cell
+        return None
+
+    end_row = 12 + days_in_month
+
+    # 「就業時間」の下の列（F列）に合計式
+    work_time_cell = find_cell_by_value(ws, "就業時間", column=5)
+    if work_time_cell:
+        target = ws.cell(row=work_time_cell.row, column=6)
+        target.value = f"=SUM(K13:K{end_row})/TIME(1,,)"
+        target.number_format = "0.0"
+
+    # 「実働日」行のC列に COUNTA(H13:H*)
+    actual_day_cell = find_cell_by_value(ws, "実働日")
+    if actual_day_cell:
+        target = ws.cell(row=actual_day_cell.row, column=3)
+        target.value = f"=COUNTA(H13:H{end_row})"
+
+    # 出力ファイル名構築
+    safe_eid = eid.replace(" ", "_").replace("　", "_")
+    output_filename = f"{template_filename}_{safe_eid}.xlsx"
 
     output_stream = io.BytesIO()
     wb.save(output_stream)
     output_stream.seek(0)
     return send_file(output_stream, as_attachment=True, download_name=output_filename)
 
-# ✅ Renderが使用するPORTを明示的にバインド
+# Render環境用ポート指定
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
