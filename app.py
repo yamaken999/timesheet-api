@@ -9,7 +9,16 @@ import os
 import io
 
 app = Flask(__name__)
-CORS(app)  # すべてのオリジンからのアクセスを許可
+CORS(app)
+
+# アプリ起動時に祝日CSVを読み込む
+holiday_map = {}
+try:
+    df_holidays = pd.read_csv("holidays.csv")
+    df_holidays['date'] = pd.to_datetime(df_holidays['date']).dt.date
+    holiday_map = dict(zip(df_holidays['date'], df_holidays['name']))
+except Exception as e:
+    print("祝日ファイルの読み込みに失敗しました:", e)
 
 @app.route("/upload", methods=["POST"])
 def generate_timesheet():
@@ -37,7 +46,6 @@ def generate_timesheet():
     df_all["Break start"] = pd.to_datetime(df_all["Break start"], errors="coerce")
     df_all["Break end"] = pd.to_datetime(df_all["Break end"], errors="coerce")
     df_all["Date"] = df_all["Work start"].dt.date
-
     df_all.sort_values("Work start", inplace=True)
 
     # Excelテンプレート読み込み
@@ -59,8 +67,16 @@ def generate_timesheet():
         date_str = current_date.strftime("%Y-%m-%d")
         day_data = df_all[df_all["Date"] == current_date]
 
-        if not day_data.empty:
+        holiday_name = holiday_map.get(current_date)
+
+        if holiday_name:
+            ws[f"C{row}"] = holiday_name
+        elif current_date.weekday() < 5:
             ws[f"C{row}"] = task
+        else:
+            ws[f"C{row}"] = ""
+
+        if not day_data.empty:
             start_time = day_data["Work start"].min()
             end_time = day_data["Work end"].max()
             ws[f"H{row}"] = start_time.time()
