@@ -1,5 +1,4 @@
-from flask import Flask, request, send_file
-from flask_cors import CORS
+from flask import Flask, request, send_file, jsonify, render_template
 from openpyxl import load_workbook
 from openpyxl.styles import Font
 from datetime import datetime, date, timedelta
@@ -11,14 +10,17 @@ import io
 app = Flask(__name__)
 CORS(app)
 
-# アプリ起動時に祝日CSVを読み込む
-holiday_map = {}
+# アプリ起動時に祝日を読み込み（存在しない場合は空セット）
 try:
-    df_holidays = pd.read_csv("holidays.csv")
-    df_holidays['date'] = pd.to_datetime(df_holidays['date']).dt.date
-    holiday_map = dict(zip(df_holidays['date'], df_holidays['name']))
-except Exception as e:
-    print("祝日ファイルの読み込みに失敗しました:", e)
+    holidays_df = pd.read_csv("holidays.csv")
+    holidays_df['date'] = pd.to_datetime(holidays_df['date']).dt.date
+    holiday_map = dict(zip(holidays_df['date'], holidays_df['name']))
+except Exception:
+    holiday_map = {}
+
+@app.route("/")
+def index():
+    return "API is running"
 
 @app.route("/upload", methods=["POST"])
 def generate_timesheet():
@@ -64,9 +66,9 @@ def generate_timesheet():
     for day in range(1, days_in_month + 1):
         current_date = date(year, month, day)
         row = 12 + day
-        date_str = current_date.strftime("%Y-%m-%d")
         day_data = df_all[df_all["Date"] == current_date]
 
+        # 祝日かどうかのチェック
         holiday_name = holiday_map.get(current_date)
 
         if holiday_name:
@@ -102,7 +104,7 @@ def generate_timesheet():
                 if ws[f"{col}{row}"].value is not None:
                     ws[f"{col}{row}"].number_format = "h:mm"
 
-    # 就業時間・実働日セルへの数式挿入
+    # 就業時間・実働日 集計
     def find_cell_by_value(ws, value, column=None):
         for row in ws.iter_rows():
             for cell in row:
@@ -134,7 +136,33 @@ def generate_timesheet():
     output_stream.seek(0)
     return send_file(output_stream, as_attachment=True, download_name=output_filename)
 
-# Render環境用ポート指定
+# =======================
+# 祝日メンテナンス画面とAPI
+# =======================
+
+@app.route("/holidays-ui")
+def holidays_ui():
+    return render_template("holidays.html")
+
+@app.route("/holidays/download", methods=["GET"])
+def download_holidays():
+    return send_file("holidays.csv", as_attachment=True, download_name="holidays.csv")
+
+@app.route("/holidays/upload", methods=["POST"])
+def upload_holidays():
+    file = request.files.get("file")
+    if not file or not file.filename.endswith(".csv"):
+        return "CSVファイルを指定してください", 400
+    df = pd.read_csv(file)
+    if "date" not in df.columns or "name" not in df.columns:
+        return "ヘッダーは 'date,name' にしてください", 400
+    df.to_csv("holidays.csv", index=False)
+    return "アップロード完了", 200
+
+# =======================
+# ローカル or Render用
+# =======================
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
