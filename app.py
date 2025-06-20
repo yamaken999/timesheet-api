@@ -8,7 +8,7 @@ import tempfile
 import os
 import io
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
 
 # アプリ起動時に祝日を読み込み（存在しない場合は空セット）
