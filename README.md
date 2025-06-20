@@ -134,7 +134,7 @@ python app.py
 ### 🚨 不具合の報告（Bug Report）
 1. このリポジトリの `Issues` タブにアクセス
 2. `Bug Report` テンプレートを選択して、必要事項を記入・送信してください
-3. HTML（frontend）側の`Issues`は[frontend](https://github.com/yamaken999/timesheet-frontend/issues)に挙げてくれるとクローズしやすくて助かります
+3. HTML（frontend）側の`Issues`は 🔗 [frontend側のIssue](https://github.com/yamaken999/timesheet-frontend/issues) に挙げてくれると管理しやすくて助かります
 
 ### 💡 機能改善・提案（Feature Request）
 1. 同様に `Issues` タブから `Feature Request` テンプレートを使用してください
