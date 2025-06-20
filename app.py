@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, jsonify, render_template
+from flask import Flask, request, send_file, render_template
 from flask_cors import CORS
 from openpyxl import load_workbook
 from openpyxl.styles import Font
@@ -10,18 +10,6 @@ import io
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
-
-# アプリ起動時に祝日を読み込み（存在しない場合は空セット）
-try:
-    holidays_df = pd.read_csv("holidays.csv")
-    holidays_df['date'] = pd.to_datetime(holidays_df['date']).dt.date
-    holiday_map = dict(zip(holidays_df['date'], holidays_df['name']))
-except Exception:
-    holiday_map = {}
-
-@app.route("/")
-def index():
-    return "API is running"
 
 @app.route("/upload", methods=["POST"])
 def generate_timesheet():
@@ -64,14 +52,27 @@ def generate_timesheet():
     days_in_month = pd.Timestamp(year=year, month=month, day=1).days_in_month
     limit_timedelta = timedelta(hours=4, minutes=48)
 
+    # 祝日辞書の読み込み
+    holiday_dict = {}
+    try:
+        with open("holidays.csv", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line: continue
+                parts = line.split(",")
+                if len(parts) >= 2:
+                    holiday_dict[parts[0]] = parts[1]
+    except:
+        pass
+
     for day in range(1, days_in_month + 1):
         current_date = date(year, month, day)
         row = 12 + day
+        date_str = current_date.strftime("%Y-%m-%d")
         day_data = df_all[df_all["Date"] == current_date]
+        holiday_name = holiday_dict.get(date_str)
 
-        # 祝日かどうかのチェック
-        holiday_name = holiday_map.get(current_date)
-
+        # C列（業務内容・祝日名など）の記入
         if holiday_name:
             ws[f"C{row}"] = holiday_name
         elif current_date.weekday() < 5:
@@ -79,6 +80,7 @@ def generate_timesheet():
         else:
             ws[f"C{row}"] = ""
 
+        # 勤務時間の処理
         if not day_data.empty:
             start_time = day_data["Work start"].min()
             end_time = day_data["Work end"].max()
@@ -105,7 +107,11 @@ def generate_timesheet():
                 if ws[f"{col}{row}"].value is not None:
                     ws[f"{col}{row}"].number_format = "h:mm"
 
-    # 就業時間・実働日 集計
+        # 休暇の記入条件（勤務なし・平日・祝日でない）
+        elif current_date.weekday() < 5 and not holiday_name:
+            ws[f"C{row}"] = "休暇"
+
+    # サマリ部分
     def find_cell_by_value(ws, value, column=None):
         for row in ws.iter_rows():
             for cell in row:
@@ -128,41 +134,32 @@ def generate_timesheet():
         target = ws.cell(row=actual_day_cell.row, column=3)
         target.value = f"=COUNTA(H13:H{end_row})"
 
-    # 出力ファイル名構築
+    # ファイル名構築
     safe_eid = eid.replace(" ", "_").replace("　", "_")
     output_filename = f"{template_filename}_{safe_eid}.xlsx"
-
     output_stream = io.BytesIO()
     wb.save(output_stream)
     output_stream.seek(0)
     return send_file(output_stream, as_attachment=True, download_name=output_filename)
 
-# =======================
-# 祝日メンテナンス画面とAPI
-# =======================
-
 @app.route("/holidays-ui")
 def holidays_ui():
     return render_template("holidays.html")
 
-@app.route("/holidays/download", methods=["GET"])
+@app.route("/holidays/download")
 def download_holidays():
-    return send_file("holidays.csv", as_attachment=True, download_name="holidays.csv")
+    try:
+        return send_file("holidays.csv", as_attachment=True)
+    except:
+        return "holidays.csv が見つかりません", 404
 
 @app.route("/holidays/upload", methods=["POST"])
 def upload_holidays():
     file = request.files.get("file")
-    if not file or not file.filename.endswith(".csv"):
-        return "CSVファイルを指定してください", 400
-    df = pd.read_csv(file)
-    if "date" not in df.columns or "name" not in df.columns:
-        return "ヘッダーは 'date,name' にしてください", 400
-    df.to_csv("holidays.csv", index=False)
-    return "アップロード完了", 200
-
-# =======================
-# ローカル or Render用
-# =======================
+    if file and file.filename.endswith(".csv"):
+        file.save("holidays.csv")
+        return "アップロード完了", 200
+    return "CSVファイルのみアップロード可能です", 400
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
