@@ -26,6 +26,7 @@ def generate_timesheet():
     files = request.files.getlist("files")  # アップロードされたファイルリスト
     name = request.form.get("name")         # 氏名
     eid = request.form.get("eid")           # EID
+    organization = request.form.get("organization")  # 組織単位
     year = int(request.form.get("year"))    # 年
     month = int(request.form.get("month"))  # 月
     task = request.form.get("task")         # 業務内容
@@ -60,7 +61,7 @@ def generate_timesheet():
 
     # 基本情報の設定
     d9_date = date(year, month, 1)  # 月初日
-    ws["D6"] = "部署名（必要に応じて固定で書く）"
+    ws["D6"] = organization # 組織単位
     ws["D8"] = name     # 氏名
     ws["D9"] = d9_date  # 対象月
 
