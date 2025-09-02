@@ -34,12 +34,13 @@ def generate_timesheet():
 
     # アップロードファイルの分類と検証
     csv_files = [f for f in files if f.filename.lower().endswith(".csv")]
-    excel_files = [f for f in files if f.filename.lower().endswith(".xlsx")]
-    if len(csv_files) != 2 or len(excel_files) != 1:
-        return "ファイル数が不正です（CSV2個・Excel1個）", 400
+    if len(csv_files) != 2:
+        return "CSV2個をアップロードしてください", 400
 
-    # テンプレートファイル名を抽出（拡張子を除く）
-    template_filename = os.path.splitext(excel_files[0].filename)[0]
+    # テンプレートファイルのパスを設定
+    template_path = os.path.join("templates", "Excel_templates", "タイムシート(yyyy_mm).xlsx")
+    if not os.path.exists(template_path):
+        return "テンプレートファイルが見つかりません", 500
 
     # CSV読み込み＆データ結合処理
     df_all = pd.concat([pd.read_csv(f) for f in csv_files], ignore_index=True)
@@ -55,19 +56,21 @@ def generate_timesheet():
     df_all.sort_values("Work start", inplace=True)
 
     # Excelテンプレートファイルの読み込み
-    wb = load_workbook(filename=io.BytesIO(excel_files[0].read()))
+    wb = load_workbook(filename=template_path)
     ws = wb.worksheets[0]  # 最初のワークシートを取得
     ws.title = f"{month}月"  # シート名を設定
-
-    # 基本情報の設定
-    d9_date = date(year, month, 1)  # 月初日
-    ws["D6"] = organization # 組織単位
-    ws["D8"] = name     # 氏名
-    ws["D9"] = d9_date  # 対象月
 
     # 月の日数と労働時間制限を設定
     days_in_month = pd.Timestamp(year=year, month=month, day=1).days_in_month
     limit_timedelta = timedelta(hours=4, minutes=48)  # 社長モード用の労働時間制限
+
+    # 基本情報の設定
+    d9_date = date(year, month, 1)  # 月初日
+    g9_date = date(year, month, days_in_month)  # 月末日
+    ws["D6"] = organization # 組織単位
+    ws["D8"] = name     # 氏名
+    ws["D9"] = d9_date  # 対象月（開始日）
+    ws["G9"] = g9_date  # 作業期間終了日（月末）
 
     # 祝日データの読み込み
     holiday_dict = {}
@@ -134,7 +137,7 @@ def generate_timesheet():
         elif current_date.weekday() < 5 and not holiday_name:
             ws[f"C{row}"] = "休暇"
 
-    # サマリ部分の計算式設定
+    # セル検索用の関数を定義
     def find_cell_by_value(ws, value, column=None):
         """
         指定した値を持つセルを検索する関数
@@ -145,7 +148,30 @@ def generate_timesheet():
                     return cell
         return None
 
-    end_row = 12 + days_in_month  # データの最終行
+    # 月の日数に応じて不要な日付行を削除
+    # 31日まで無い月（28日、29日、30日）の場合、余分な日付行を削除
+    if days_in_month < 31:
+        # 削除する行の範囲を計算（月末の次の日から31日まで）
+        start_delete_row = 12 + days_in_month + 1  # 削除開始行
+        end_delete_row = 12 + 31  # 削除終了行（31日分の最後の行）
+        
+        # 後ろの行から削除（行番号がずれることを防ぐため）
+        for row_to_delete in range(end_delete_row, start_delete_row - 1, -1):
+            ws.delete_rows(row_to_delete)
+        
+        # 行削除後にセルの結合を再設定
+        # 「実働日」のセル結合を修復
+        try:
+            # 実働日のセル結合（A列とB列）
+            actual_day_cell = find_cell_by_value(ws, "実働日")
+            if actual_day_cell:
+                merge_range = f"A{actual_day_cell.row}:B{actual_day_cell.row}"
+                ws.merge_cells(merge_range)
+        except:
+            pass  # 結合に失敗しても処理を継続
+
+    # サマリ部分の計算式設定
+    end_row = 12 + days_in_month  # データの最終行（行削除後の実際の最終行）
 
     # 「就業時間」の合計計算式を設定
     work_time_cell = find_cell_by_value(ws, "就業時間", column=5)  # E列で「就業時間」を検索
@@ -153,6 +179,11 @@ def generate_timesheet():
         target = ws.cell(row=work_time_cell.row, column=6)  # F列に計算式を設定
         target.value = f"=SUM(K13:K{end_row})/TIME(1,,)"  # 就業時間の合計
         target.number_format = "0.0"  # 数値フォーマット
+        
+        # 残業時間の計算式を設定（同じ行のI列）
+        overtime_target = ws.cell(row=work_time_cell.row, column=9)  # I列に計算式を設定
+        overtime_target.value = f"=F{work_time_cell.row}-C{work_time_cell.row}*8"  # 残業時間の計算
+        overtime_target.number_format = "0.00"  # 数値フォーマット
 
     # 「実働日」のカウント計算式を設定
     actual_day_cell = find_cell_by_value(ws, "実働日")
@@ -162,7 +193,7 @@ def generate_timesheet():
 
     # ファイル出力処理
     safe_eid = eid.replace(" ", "_").replace("　", "_")  # ファイル名用に空白が入力されていた場合アンダースコアに変換
-    output_filename = f"{template_filename}_{safe_eid}.xlsx"  # 出力ファイル名
+    output_filename = f"タイムシート({year:04d}_{month:02d})_{safe_eid}.xlsx"  # 出力ファイル名
     output_stream = io.BytesIO()  # メモリ上のファイルストリーム
     wb.save(output_stream)  # ワークブックをストリームに保存
     output_stream.seek(0)   # ストリームの先頭に移動

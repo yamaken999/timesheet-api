@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "defaultProvider": "azure",
+  "providers": {
+    "azure": {
+      "app": {
+        "settings": {
+          "WEBSITES_ENABLE_APP_SERVICE_STORAGE": "false",
+          "WEBSITES_PORT": "8000",
+          "SCM_DO_BUILD_DURING_DEPLOYMENT": "true"
+        }
+      }
+    }
+  }
+}
