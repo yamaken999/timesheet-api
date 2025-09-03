@@ -14,6 +14,13 @@ import io
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)  # CORS（Cross-Origin Resource Sharing）を有効化
 
+@app.route("/")
+def home():
+    """
+    ヘルスチェック用のルートエンドポイント
+    """
+    return {"status": "OK", "message": "Timesheet API is running"}
+
 @app.route("/upload", methods=["POST"])
 def generate_timesheet():
     """
