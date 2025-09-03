@@ -206,6 +206,35 @@ def generate_timesheet():
     output_stream.seek(0)   # ストリームの先頭に移動
     return send_file(output_stream, as_attachment=True, download_name=output_filename)
 
+@app.route("/holidays")
+def get_holidays():
+    """
+    祝日データをJSON形式で返すAPI
+    """
+    year = request.args.get('year', type=int)
+    
+    try:
+        # holidays.csvファイルを読み込み
+        holidays_df = pd.read_csv('holidays.csv')
+        
+        # year指定がある場合はフィルタリング
+        if year:
+            holidays_df['date'] = pd.to_datetime(holidays_df['date'])
+            holidays_df = holidays_df[holidays_df['date'].dt.year == year]
+        
+        # JSONレスポンス用にデータを整形
+        holidays_list = []
+        for _, row in holidays_df.iterrows():
+            holidays_list.append({
+                'date': row['date'],
+                'name': row['name']
+            })
+        
+        return {"holidays": holidays_list}
+        
+    except Exception as e:
+        return {"error": str(e)}, 500
+
 @app.route("/holidays-ui")
 def holidays_ui():
     """
