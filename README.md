@@ -168,7 +168,7 @@ python -m pytest test_app.py::test_home -v
 
 ### GitHub Actions
 - **トリガー**: `master` ブランチへのプッシュ
-- **ビルド**: Python 3.11環境での依存関係インストール
+- **ビルド**: Python 3.12環境での依存関係インストール
 - **デプロイ**: Azure App Serviceへの自動デプロイ
 - **シークレット**: `AZURE_WEBAPP_API_PUBLISH_PROFILE` (Azure発行プロファイル)
 
@@ -365,7 +365,7 @@ pytest
 - **CORS設定**: GitHub Pages (`yamaken999.github.io`) 最適化
 
 #### 🔧 Technical Improvements
-- **Python 3.11** 環境での安定動作
+- **Python 3.12** 環境での安定動作
 - **Gunicorn** WSGIサーバーによる本番環境最適化
 - **OpenCensus** ライブラリによる詳細トレーシング
 - **環境変数管理** によるセキュリティ強化
