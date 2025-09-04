@@ -9,16 +9,43 @@ import tempfile
 import os
 import io
 
+# Application Insights の設定
+import logging
+from opencensus.ext.azure.log_exporter import AzureLogHandler
+from opencensus.ext.flask.flask_middleware import FlaskMiddleware
+from opencensus.ext.azure.trace_exporter import AzureExporter
+from opencensus.trace.samplers import ProbabilitySampler
+
 # Flaskアプリケーションの初期化
 # テンプレートフォルダとスタティックフォルダを指定
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)  # CORS（Cross-Origin Resource Sharing）を有効化
+
+# Application Insights の設定
+connection_string = os.environ.get('APPLICATIONINSIGHTS_CONNECTION_STRING')
+if connection_string:
+    # Flaskミドルウェアの設定
+    middleware = FlaskMiddleware(
+        app,
+        exporter=AzureExporter(connection_string=connection_string),
+        sampler=ProbabilitySampler(rate=1.0),
+    )
+    
+    # ログの設定
+    logger = logging.getLogger(__name__)
+    logger.addHandler(AzureLogHandler(connection_string=connection_string))
+    logger.setLevel(logging.INFO)
+    
+    app.logger.info("Application Insights configured successfully")
+else:
+    app.logger.warning("Application Insights connection string not found")
 
 @app.route("/")
 def home():
     """
     ヘルスチェック用のルートエンドポイント
     """
+    app.logger.info("Health check endpoint accessed")
     return {"status": "OK", "message": "Timesheet API is running"}
 
 @app.route("/upload", methods=["POST"])
@@ -212,6 +239,7 @@ def get_holidays():
     祝日データをJSON形式で返すAPI
     """
     year = request.args.get('year', type=int)
+    app.logger.info(f"Holidays API accessed with year parameter: {year}")
     
     try:
         # holidays.csvファイルを読み込み
@@ -230,9 +258,11 @@ def get_holidays():
                 'name': row['name']
             })
         
+        app.logger.info(f"Returning {len(holidays_list)} holidays for year {year}")
         return {"holidays": holidays_list}
         
     except Exception as e:
+        app.logger.error(f"Error in holidays API: {str(e)}")
         return {"error": str(e)}, 500
 
 @app.route("/holidays-ui")
